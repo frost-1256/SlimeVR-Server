@@ -120,35 +120,38 @@ class DataFeedHandler(private val api: ProtocolAPI) : ProtocolHandler<DataFeedMe
 		this.api.apiServers.forEach(
 			Consumer { server: ProtocolAPIServer ->
 				server.apiConnections.forEach { conn: GenericConnection ->
-					var fbb: FlatBufferBuilder? = null
 					val feedList = conn.context.dataFeedList
 					synchronized(feedList) {
 						val configsCount = feedList.size
-						val data = IntArray(configsCount)
+						val headers = ArrayList<Int>(configsCount)
+						var fbb: FlatBufferBuilder? = null
 						for (index in 0..<configsCount) {
 							val feed = feedList[index]
 							val lastTimeSent = feed.timeLastSent
 							val configT = feed.config
 							if (currTime - lastTimeSent > configT.minimumTimeSinceLast) {
-								if (fbb == null) {
-									// That way we create a buffer only when needed
-									fbb = FlatBufferBuilder(300)
-								}
+								// Create the buffer only when there is something to send.
+								val builder = fbb ?: FlatBufferBuilder(300).also { fbb = it }
 
-								val messageOffset = this.buildDatafeed(fbb, configT, index)
+								val messageOffset = this.buildDatafeed(builder, configT, index)
 
-								DataFeedMessageHeader.startDataFeedMessageHeader(fbb)
-								DataFeedMessageHeader.addMessage(fbb, messageOffset)
-								DataFeedMessageHeader.addMessageType(fbb, DataFeedMessage.DataFeedUpdate)
-								data[index] = DataFeedMessageHeader.endDataFeedMessageHeader(fbb)
+								DataFeedMessageHeader.startDataFeedMessageHeader(builder)
+								DataFeedMessageHeader.addMessage(builder, messageOffset)
+								DataFeedMessageHeader.addMessageType(builder, DataFeedMessage.DataFeedUpdate)
+								headers.add(DataFeedMessageHeader.endDataFeedMessageHeader(builder))
 
 								feed.timeLastSent = currTime
-								val messages = MessageBundle.createDataFeedMsgsVector(fbb, data)
-								val packet = createMessage(fbb, messages)
-								fbb.finish(packet)
-								conn.send(fbb.dataBuffer())
 							}
 						}
+						val builder = fbb ?: return@synchronized
+
+						// Only include headers that were actually built. A vector with
+						// null entries is invalid Flat Buffers: strict verifiers reject
+						// the entire frame, including its tracker data.
+						val messages = MessageBundle.createDataFeedMsgsVector(builder, headers.toIntArray())
+						val packet = createMessage(builder, messages)
+						builder.finish(packet)
+						conn.send(builder.dataBuffer())
 					}
 				}
 			},

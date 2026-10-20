@@ -411,14 +411,14 @@ fun createDevicesData(
 ): Int {
 	if (deviceDataMaskT == null) return 0
 
-	val devicesDataOffsets = IntArray(devices.size)
-	for (i in devices.indices) {
-		val device = devices[i]
-		devicesDataOffsets[i] =
-			createDeviceData(fbb, device.id, deviceDataMaskT, device)
+	// A device without trackers produces no table. Flat Buffers vectors may not
+	// contain null offsets, and strict verifiers (the Rust client) reject the
+	// whole frame when they do, so leave such devices out of the vector.
+	val devicesDataOffsets = devices.mapNotNull { device ->
+		createDeviceData(fbb, device.id, deviceDataMaskT, device).takeIf { it != 0 }
 	}
 
-	return DataFeedUpdate.createDevicesVector(fbb, devicesDataOffsets)
+	return DataFeedUpdate.createDevicesVector(fbb, devicesDataOffsets.toIntArray())
 }
 
 fun createBonesData(
