@@ -34,7 +34,7 @@ class YawDriftEstimator {
 	private var timeSinceSample = 0.0f
 
 	/** Whether there is a usable drift estimate. */
-	fun hasEstimate() = samples > 0 && rate != 0.0f
+	fun hasEstimate() = samples >= MIN_SAMPLES && rate != 0.0f
 
 	/** Forgets the estimate, e.g. after a reset. */
 	fun reset() {
@@ -123,6 +123,9 @@ class YawDriftEstimator {
 
 		/** Time constant of the rate average. */
 		const val TIME_CONSTANT_SECONDS = 8.0f
+
+		/** Windows needed before the estimate is trusted enough to apply. */
+		const val MIN_SAMPLES = 2
 
 		/**
 		 * Larger per-window rates are slips or motion, not drift (~21 deg/min).

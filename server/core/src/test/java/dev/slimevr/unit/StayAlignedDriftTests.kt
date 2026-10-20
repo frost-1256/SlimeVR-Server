@@ -21,11 +21,12 @@ class StayAlignedDriftTests {
 		seconds: Float,
 		noiseRad: Float = 0.0f,
 		dtSeconds: Float = 0.001f,
+		startSeconds: Float = 0.0f,
 	) {
 		var tick = 0
 		val random = java.util.Random(1234L)
 		while (tick * dtSeconds < seconds) {
-			val time = tick * dtSeconds
+			val time = startSeconds + tick * dtSeconds
 			val noise = if (noiseRad == 0.0f) {
 				0.0f
 			} else {
@@ -55,6 +56,18 @@ class StayAlignedDriftTests {
 
 		Assertions.assertEquals(-0.002f, estimator.rate, 1e-5f)
 		Assertions.assertEquals(0.0002f, estimator.correction(0.1f).toRad(), 1e-6f)
+	}
+
+	@Test
+	fun `a single window is not trusted`() {
+		val estimator = YawDriftEstimator()
+		feed(estimator, 0.001f, 2.1f)
+		Assertions.assertFalse(estimator.hasEstimate())
+		Assertions.assertEquals(0.0f, estimator.correction(0.1f).toRad())
+
+		feed(estimator, 0.001f, 2.1f, startSeconds = 2.1f)
+		Assertions.assertTrue(estimator.hasEstimate())
+		Assertions.assertEquals(-0.0001f, estimator.correction(0.1f).toRad(), 1e-6f)
 	}
 
 	@Test
