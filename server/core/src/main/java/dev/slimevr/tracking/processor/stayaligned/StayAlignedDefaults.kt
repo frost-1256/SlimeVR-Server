@@ -14,7 +14,8 @@ object StayAlignedDefaults {
 
 	// Rest detector for detecting when trackers are at rest
 	fun makeRestDetector() = RestDetector(
-		maxRotation = Angle.ofDeg(2.0f),
+		enterRestRotation = Angle.ofDeg(2.0f),
+		exitRestRotation = Angle.ofDeg(10.0f),
 		enterRestTime = 1.seconds,
 		enterMovingTime = 3.seconds,
 	)

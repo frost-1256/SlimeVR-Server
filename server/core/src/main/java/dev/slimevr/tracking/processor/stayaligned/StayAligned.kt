@@ -1,6 +1,5 @@
 package dev.slimevr.tracking.processor.stayaligned
 
-import dev.slimevr.VRServer
 import dev.slimevr.config.StayAlignedConfig
 import dev.slimevr.math.Angle
 import dev.slimevr.tracking.processor.stayaligned.StayAlignedDefaults.IMU_TO_YAW_CORRECTION
@@ -32,11 +31,19 @@ object StayAligned {
 			return
 		}
 
-		val trackerToAdjust = trackers.allTrackers[nextTrackerIndex % numTrackers]
-		++nextTrackerIndex
+		val index = nextTrackerIndex % numTrackers
+		val trackerToAdjust = trackers.allTrackers[index]
+		nextTrackerIndex = (index + 1) % numTrackers
+
+		val state = trackerToAdjust.stayAligned
 
 		// Update hide correction since the config could have changed
-		trackerToAdjust.stayAligned.hideCorrection = config.hideYawCorrection
+		state.hideCorrection = config.hideYawCorrection
+
+		// Use the measured interval for this tracker rather than the server frame
+		// time times the tracker count. The latter drifts whenever the loop lags or
+		// the tracker list changes, which directly skewed the correction rate.
+		val dtSeconds = state.elapsedSinceAdjustment()
 
 		val yawCorrectionPerSec =
 			IMU_TO_YAW_CORRECTION.getOrDefault(trackerToAdjust.imuType, YAW_CORRECTION_DEFAULT)
@@ -44,16 +51,11 @@ object StayAligned {
 			return
 		}
 
-		// Scale yaw correction since we're only updating one tracker per tick
-		val yawCorrection =
-			yawCorrectionPerSec *
-				VRServer.instance.fpsTimer.timePerFrame *
-				numTrackers.toFloat()
-
 		AdjustTrackerYaw.adjust(
 			trackerToAdjust,
 			trackers,
-			yawCorrection,
+			yawCorrectionPerSec * dtSeconds,
+			dtSeconds,
 			config,
 		)
 	}

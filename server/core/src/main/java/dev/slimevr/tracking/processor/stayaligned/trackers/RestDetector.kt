@@ -11,13 +11,19 @@ import kotlin.time.TimeSource
  * A tracker is at rest when it stays within a certain rotational range for a given
  * amount of time. If it rotates past that range, it is no longer at rest.
  *
+ * Entering and leaving rest use different ranges: drift is slow, so a locked
+ * tracker often drifts a few degrees over several minutes and must not be
+ * unlocked by it. Real motion crosses the wider exit range almost immediately.
+ *
  * TODO: In practice this is good enough for Stay Aligned, but we could also consider
  * 		acceleration if we want to make this a general purpose rest detector.
  */
 class RestDetector(
-	private val maxRotation: Angle,
+	private val enterRestRotation: Angle,
+	private val exitRestRotation: Angle,
 	private val enterRestTime: Duration,
 	private val enterMovingTime: Duration,
+	private val timeSource: TimeSource.WithComparableMarks = TimeSource.Monotonic,
 ) {
 	enum class State {
 		MOVING,
@@ -29,17 +35,17 @@ class RestDetector(
 		private set
 
 	// Instant that we entered the current state
-	private var startTime = TimeSource.Monotonic.markNow()
+	private var startTime = timeSource.markNow()
 
 	// Rotation which could
 	private var lastRotation = Quaternion.IDENTITY
-	private var lastRotationTime = TimeSource.Monotonic.markNow()
+	private var lastRotationTime = timeSource.markNow()
 
 	/**
 	 * Resets the detector
 	 */
 	fun reset() {
-		val now = TimeSource.Monotonic.markNow()
+		val now = timeSource.markNow()
 
 		state = State.MOVING
 		startTime = now
@@ -53,7 +59,7 @@ class RestDetector(
 	 * @return whether the tracker is at rest
 	 */
 	fun update(rotation: Quaternion) {
-		val now = TimeSource.Monotonic.markNow()
+		val now = timeSource.markNow()
 
 		if (
 			state == State.RECENTLY_AT_REST &&
@@ -69,7 +75,7 @@ class RestDetector(
 			State.MOVING,
 			State.RECENTLY_AT_REST,
 			->
-				if (Angle.absBetween(lastRotation, rotation) > maxRotation) {
+				if (Angle.absBetween(lastRotation, rotation) > enterRestRotation) {
 					lastRotation = rotation
 					lastRotationTime = now
 				} else {
@@ -84,7 +90,7 @@ class RestDetector(
 				}
 
 			State.AT_REST ->
-				if (Angle.absBetween(lastRotation, rotation) > maxRotation) {
+				if (Angle.absBetween(lastRotation, rotation) > exitRestRotation) {
 					state = State.RECENTLY_AT_REST
 					startTime = now
 					lastRotation = rotation

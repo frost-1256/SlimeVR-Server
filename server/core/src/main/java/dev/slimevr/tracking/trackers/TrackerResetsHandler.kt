@@ -120,28 +120,37 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	 * Reads/loads drift compensation settings from given config
 	 */
 	fun readDriftCompensationConfig(config: DriftCompensationConfig) {
-		compensateDrift = false
+		compensateDrift = config.enabled
 		driftPrediction = config.prediction
-		driftAmount = config.amount
-		val maxResets = config.maxResets
+		driftAmount = config.amount.coerceIn(0.0f, 1.0f)
+		val maxResets = config.maxResets.coerceIn(1, MAX_DRIFT_SAMPLES)
 
-		if (compensateDrift && maxResets != driftQuats.capacity()) {
+		// Keep the ring buffers in sync with the configured sample count even when
+		// compensation is disabled, so enabling it later uses the right capacity.
+		if (maxResets != driftQuats.capacity()) {
 			driftQuats = CircularArrayList<Quaternion>(maxResets)
 			driftTimes = CircularArrayList<Long>(maxResets)
+			clearDriftCompensation()
 		}
 
 		refreshDriftCompensationEnabled()
 	}
 
 	/**
-	 * Clears drift compensation data
+	 * Clears drift compensation data.
+	 *
+	 * The averaged correction and the reset reference have to go too, otherwise the
+	 * tracker keeps wearing the compensation from before the clear.
 	 */
 	fun clearDriftCompensation() {
 		driftSince = 0L
 		timeAtLastReset = 0L
 		totalDriftTime = 0L
+		averagedDriftQuat = Quaternion.IDENTITY
+		rotationSinceReset = Quaternion.IDENTITY
 		driftQuats.clear()
 		driftTimes.clear()
+		refreshDriftCompensationEnabled()
 	}
 
 	/**
@@ -243,14 +252,24 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	 * and returns it
 	 */
 	private fun adjustToDrift(rotation: Quaternion): Quaternion {
-		if (driftCompensationEnabled && totalDriftTime > 0) {
-			var driftTimeRatio = ((System.currentTimeMillis() - driftSince).toFloat() / totalDriftTime)
-			if (!driftPrediction) {
-				driftTimeRatio = min(1.0f, driftTimeRatio)
-			}
-			return averagedDriftQuat.pow(driftAmount * driftTimeRatio) * rotation
+		if (!driftCompensationEnabled || totalDriftTime <= 0) {
+			return rotation
 		}
-		return rotation
+
+		val elapsed = System.currentTimeMillis() - driftSince
+		val ratio = driftTimeRatio(elapsed, totalDriftTime, driftPrediction)
+		if (ratio <= 0.0f) {
+			return rotation
+		}
+
+		// A sample larger than this is almost certainly a yaw wrap or a mounting
+		// slip rather than drift; applying it would snap the tracker.
+		val drift = if (averagedDriftQuat.angleToR(Quaternion.IDENTITY) > MAX_DRIFT_ANGLE_RAD) {
+			Quaternion.IDENTITY
+		} else {
+			averagedDriftQuat
+		}
+		return drift.pow(driftAmount * ratio) * rotation
 	}
 
 	/**
@@ -595,5 +614,34 @@ class TrackerResetsHandler(val tracker: Tracker) {
 			totalMatrix += (qn[i].toMatrix() * tn[i])
 		}
 		return totalMatrix.toQuaternion()
+	}
+
+	companion object {
+		/** Upper bound on the number of stored drift samples. */
+		const val MAX_DRIFT_SAMPLES = 32
+
+		/**
+		 * Prediction may run at most one extra averaging window past the last
+		 * sample. Unbounded prediction kept rotating the tracker forever when no
+		 * fresh sample arrived, which turned estimator noise into visible drift.
+		 */
+		const val MAX_DRIFT_PREDICTION_RATIO = 2.0f
+
+		/** A larger "drift" is a yaw wrap or mounting slip, not drift. */
+		const val MAX_DRIFT_ANGLE_RAD = 1.5f
+
+		/**
+		 * How much of the averaged drift to apply, as a multiple of the elapsed
+		 * averaging window. Without prediction the correction saturates after one
+		 * window; with prediction it may run one window ahead, then saturates.
+		 */
+		fun driftTimeRatio(elapsedMs: Long, totalMs: Long, prediction: Boolean): Float {
+			if (elapsedMs <= 0 || totalMs <= 0) {
+				return 0.0f
+			}
+			val ratio = elapsedMs.toFloat() / totalMs.toFloat()
+			val maxRatio = if (prediction) MAX_DRIFT_PREDICTION_RATIO else 1.0f
+			return min(maxRatio, ratio)
+		}
 	}
 }

@@ -64,6 +64,7 @@ object AdjustTrackerYaw {
 		tracker: Tracker,
 		trackers: TrackerSkeleton,
 		yawCorrection: Angle,
+		dtSeconds: Float,
 		config: StayAlignedConfig,
 	) {
 		// Only IMUs can drift
@@ -83,8 +84,14 @@ object AdjustTrackerYaw {
 
 		val restDetector = state.restDetector
 		when (restDetector.state) {
-			RestDetector.State.MOVING ->
+			RestDetector.State.MOVING -> {
 				adjustMovingTracker(tracker, trackers, yawCorrection, config)
+
+				// Apply the drift rate learned during the last rest. At rest the
+				// locked tracker measures drift directly, so this only runs while
+				// moving, where the error based forces react too slowly.
+				state.yawCorrection = state.yawCorrection + state.yawDrift.correction(dtSeconds)
+			}
 
 			RestDetector.State.AT_REST ->
 				adjustLockedTracker(tracker, trackers, yawCorrection)
