@@ -6,6 +6,7 @@ import dev.slimevr.config.ArmsResetModes
 import dev.slimevr.config.DriftCompensationConfig
 import dev.slimevr.config.ResetsConfig
 import dev.slimevr.filtering.CircularArrayList
+import dev.slimevr.recording.LiveDataRecorder
 import dev.slimevr.tracking.trackers.udp.TrackerDataType
 import io.github.axisangles.ktmath.EulerAngles
 import io.github.axisangles.ktmath.EulerOrder
@@ -41,6 +42,22 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	var resetHmdPitch = false
 	var allowDriftCompensation = false
 	var lastResetQuaternion: Quaternion? = null
+
+	/** Averaged drift correction, recorded for live data analysis. */
+	val driftQuaternion: Quaternion
+		get() = averagedDriftQuat
+
+	/** Rotation accumulated since the last reset, recorded for live data analysis. */
+	val rotationSinceLastReset: Quaternion
+		get() = rotationSinceReset
+
+	/** Fraction of the drift correction currently applied. */
+	val appliedDriftAmount: Float
+		get() = driftAmount
+
+	/** Whether drift compensation is currently applied to this tracker. */
+	val driftCompensationActive: Boolean
+		get() = driftCompensationEnabled
 
 	// Manual mounting orientation
 	var mountingOrientation = HalfHorizontal
@@ -143,6 +160,7 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	 * tracker keeps wearing the compensation from before the clear.
 	 */
 	fun clearDriftCompensation() {
+		LiveDataRecorder.event(tracker, "clear_drift")
 		driftSince = 0L
 		timeAtLastReset = 0L
 		totalDriftTime = 0L
@@ -277,6 +295,7 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	 * 0). This allows the tracker to be strapped to body at any pitch and roll.
 	 */
 	fun resetFull(reference: Quaternion) {
+		LiveDataRecorder.event(tracker, "reset_full")
 		constraintFix = Quaternion.IDENTITY
 
 		if (tracker.trackerDataType == TrackerDataType.FLEX_RESISTANCE) {
@@ -373,6 +392,7 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	 * position should be corrected in the source.
 	 */
 	fun resetYaw(reference: Quaternion) {
+		LiveDataRecorder.event(tracker, "reset_yaw")
 		// TODO HMD doesn't get yaw reset, which makes it so tracker.resetFilteringQuats() doesn't get called
 
 		constraintFix = Quaternion.IDENTITY
@@ -417,6 +437,7 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	 * and stores it in mountRotFix, and adjusts yawFix
 	 */
 	fun resetMounting(reference: Quaternion) {
+		LiveDataRecorder.event(tracker, "reset_mounting")
 		if (tracker.trackerDataType == TrackerDataType.FLEX_RESISTANCE) {
 			tracker.trackerFlexHandler.resetMax()
 			tracker.resetFilteringQuats(reference)
@@ -483,6 +504,7 @@ class TrackerResetsHandler(val tracker: Tracker) {
 	}
 
 	fun clearMounting() {
+		LiveDataRecorder.event(tracker, "clear_mounting")
 		mountRotFix = Quaternion.IDENTITY
 	}
 

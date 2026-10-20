@@ -19,6 +19,7 @@ import dev.slimevr.posestreamer.BVHRecorder
 import dev.slimevr.protocol.ProtocolAPI
 import dev.slimevr.protocol.rpc.TransactionInfo
 import dev.slimevr.protocol.rpc.settings.RPCSettingsHandler
+import dev.slimevr.recording.LiveDataRecorder
 import dev.slimevr.reset.ResetHandler
 import dev.slimevr.reset.ResetTimerManager
 import dev.slimevr.reset.resetTimer
@@ -93,6 +94,9 @@ class VRServer @JvmOverloads constructor(
 
 	@JvmField
 	val bvhRecorder: BVHRecorder
+
+	@JvmField
+	val liveDataRecorder: LiveDataRecorder
 
 	@JvmField
 	val serialHandler: SerialHandler
@@ -187,6 +191,13 @@ class VRServer @JvmOverloads constructor(
 		}
 
 		instance = this
+
+		liveDataRecorder = LiveDataRecorder(
+			configManager.vrConfig.recording,
+			{ allTrackers },
+			{ configManager.vrConfig.driftCompensation },
+		)
+		liveDataRecorder.startService()
 	}
 
 	fun hasBridge(bridgeClass: Class<out Bridge?>): Boolean {

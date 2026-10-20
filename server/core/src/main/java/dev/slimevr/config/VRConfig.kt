@@ -62,6 +62,8 @@ class VRConfig {
 
 	val vrcConfig: VRCConfig = VRCConfig()
 
+	val recording: RecordingConfig = RecordingConfig()
+
 	init {
 		// Initialize default settings for OSC Router
 		oscRouter.portIn = 9002
