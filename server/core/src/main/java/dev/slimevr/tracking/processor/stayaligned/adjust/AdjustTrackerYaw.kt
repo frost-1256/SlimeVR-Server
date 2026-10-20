@@ -93,8 +93,15 @@ object AdjustTrackerYaw {
 				state.yawCorrection = state.yawCorrection + state.yawDrift.correction(dtSeconds)
 			}
 
-			RestDetector.State.AT_REST ->
+			RestDetector.State.AT_REST -> {
 				adjustLockedTracker(tracker, trackers, yawCorrection)
+
+				// Locked trackers are corrected by the error gradient, but that is
+				// capped by yawCorrectionPerSec. Feeding the measured drift forward
+				// here cancels drift above that cap before it can walk the tracker
+				// out of the lock window.
+				state.yawCorrection = state.yawCorrection + state.yawDrift.correction(dtSeconds)
+			}
 
 			RestDetector.State.RECENTLY_AT_REST -> {
 				// Do not adjust trackers that were recently at rest, to support play
