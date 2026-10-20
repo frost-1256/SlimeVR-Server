@@ -61,8 +61,12 @@ class QuaternionMovingAverage(
 		if (type == TrackerFilters.PREDICTION) {
 			val rotBuf = rotBuffer
 			if (rotBuf != null && rotBuf.isNotEmpty()) {
-				// Applies the past rotations to the current rotation
-				val predictRot = rotBuf.fold(latestQuaternion) { buf, rot -> buf * rot }
+				// Applies the past rotations to the current rotation. The newest
+				// delta is applied first: it is the best estimate of the angular
+				// velocity the tracker has right now, so a tracker that is
+				// accelerating is predicted with its current rate instead of the
+				// rate it had six samples ago.
+				val predictRot = predictRotation(rotBuf, latestQuaternion)
 
 				// Calculate how much to slerp
 				// Limit slerp by a reasonable amount so low TPS doesn't break tracking
@@ -124,4 +128,19 @@ class QuaternionMovingAverage(
 		filteredQuaternion = rot
 		addQuaternion(rot)
 	}
+}
+
+/**
+ * Extrapolates [latest] by replaying [deltas], newest first.
+ *
+ * Each delta is expressed in the local frame of the sample before it, so replaying
+ * the newest delta first continues the most recent motion. Replaying in insertion
+ * order would predict with the oldest rate that is still buffered.
+ */
+internal fun predictRotation(deltas: List<Quaternion>, latest: Quaternion): Quaternion {
+	var rotation = latest
+	for (index in deltas.size - 1 downTo 0) {
+		rotation *= deltas[index]
+	}
+	return rotation
 }

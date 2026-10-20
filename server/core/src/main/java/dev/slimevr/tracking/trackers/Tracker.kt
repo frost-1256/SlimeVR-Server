@@ -2,6 +2,7 @@ package dev.slimevr.tracking.trackers
 
 import dev.slimevr.VRServer
 import dev.slimevr.config.TrackerConfig
+import dev.slimevr.math.Quaternions
 import dev.slimevr.tracking.processor.stayaligned.trackers.StayAlignedTrackerState
 import dev.slimevr.tracking.trackers.TrackerPosition.Companion.getByDesignation
 import dev.slimevr.tracking.trackers.udp.IMUType
@@ -469,7 +470,7 @@ class Tracker @JvmOverloads constructor(
 	 * Sets the raw (unadjusted) rotation of the tracker.
 	 */
 	fun setRotation(rotation: Quaternion) {
-		this._rotation = rotation
+		this._rotation = Quaternions.sanitize(rotation)
 	}
 
 	/**

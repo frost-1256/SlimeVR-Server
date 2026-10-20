@@ -1,5 +1,6 @@
 package dev.slimevr.tracking.trackers.udp
 
+import dev.slimevr.math.Quaternions
 import dev.slimevr.tracking.trackers.TrackerPosition
 import dev.slimevr.tracking.trackers.TrackerStatus
 import io.github.axisangles.ktmath.Quaternion
@@ -432,14 +433,7 @@ class UDPUtils {
 			val z = byteBuffer.getFloat()
 			val w = byteBuffer.getFloat()
 
-			return if (
-				(x.isNaN() || y.isNaN() || z.isNaN() || w.isNaN()) ||
-				(x == 0f && y == 0f && z == 0f && w == 0f)
-			) {
-				Quaternion.IDENTITY
-			} else {
-				Quaternion(w, x, y, z)
-			}
+			return Quaternions.sanitize(Quaternion(w, x, y, z))
 		}
 		fun getSafeBufferFloat(byteBuffer: ByteBuffer): Float {
 			val value = byteBuffer.getFloat()
