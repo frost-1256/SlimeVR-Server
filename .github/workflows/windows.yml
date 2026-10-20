@@ -1,0 +1,78 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.33.0"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Build desktop jar
+        shell: cmd
+        run: gradlew.bat :server:desktop:shadowJar --no-daemon
+
+      # electron-builder expects the native helper under
+      # bindings-provider/build/win-x64/Release/.
+      - name: Build bindings provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S bindings-provider -B bindings-provider/build -A x64 \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build bindings-provider/build --config Release --parallel 4
+          mkdir -p bindings-provider/build/win-x64/Release
+          cp bindings-provider/build/Release/SlimeVR-Bindings-Provider.exe \
+            bindings-provider/build/win-x64/Release/
+          cp bindings-provider/build/openvr_api.dll \
+            bindings-provider/build/win-x64/Release/
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build GUI
+        run: pnpm run build
+
+      - name: Package Windows zip
+        working-directory: gui
+        run: pnpm exec electron-builder --win --x64 --publish never
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: slimevr-server-win64
+          path: gui/dist/artifacts/win/*.zip
+          if-no-files-found: error
