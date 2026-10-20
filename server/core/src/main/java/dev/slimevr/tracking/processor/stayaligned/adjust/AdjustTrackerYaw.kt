@@ -98,7 +98,9 @@ object AdjustTrackerYaw {
 
 			RestDetector.State.RECENTLY_AT_REST -> {
 				// Do not adjust trackers that were recently at rest, to support play
-				// styles that are primarily at rest
+				// styles that are primarily at rest. Drift cancellation is posture
+				// independent, so keep feeding it forward across the transition.
+				state.yawCorrection = state.yawCorrection + state.yawDrift.correction(dtSeconds)
 			}
 		}
 	}
